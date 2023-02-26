@@ -58,7 +58,6 @@ for i in tqdm(range(max_iterations)):
 
   # Initialize policy
   policy = np.array(softmax(eta*Q_hat, axis=-1))
-  # Initilize reward at the beginning of episode?? TODO
   total_reward = 0
 
   for t in range(tau):
@@ -110,10 +109,10 @@ for i in tqdm(range(max_iterations)):
 
   # Store episode reward and phase length
   rewards.append(total_reward)
-  phase_lengths.append(t) # TODO this is basically the total_rewards-1 since reward is +1 for each time step
+  phase_lengths.append(t) # TODO this is basically the total_rewards-1 since reward is +1 for each time step, do we need it?
 
   if len(av_rewards) == 100:
-    av_rewards = av_rewards[1:] #TODO what is this?
+    av_rewards = av_rewards[1:] #TODO what is this? Are we really taking the average of last 100 episodes?
   av_rewards.append(total_reward)
 
   # Print progress every 100 iterations
