@@ -51,7 +51,7 @@ total_reward = 0
 
 # Algorithm: Politex
 # Reset the environment and sample an initial state obs
-obs, _ = env.reset()
+obs, info = env.reset()
 obs = Discrete(obs, bins)
 
 for i in tqdm(range(max_iterations)):
@@ -71,7 +71,8 @@ for i in tqdm(range(max_iterations)):
       # a = np.argmax(qs) # Greedy action for state.
 
     # Take action a and observe the reward and next state s'
-    next_obs, reward, done, _, _ = env.step(action)
+    next_obs, reward, terminated, truncated, info = env.step(action)
+    done = terminated or truncated
     next_obs = Discrete(next_obs, bins)
 
     # Store experience in replay buffer
@@ -83,7 +84,7 @@ for i in tqdm(range(max_iterations)):
     total_reward += reward
 
     if done:
-        obs, _ = env.reset()
+        obs, info = env.reset()
         obs = Discrete(obs, bins)
         break
 
