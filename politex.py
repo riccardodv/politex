@@ -8,16 +8,6 @@ from scipy.special import softmax
 import csv
 
 
-def initi_Q(state_space, action_space, bin_size=30):
-    
-    bins = [np.linspace(-4.8,4.8,bin_size),
-            np.linspace(-4,4,bin_size),
-            np.linspace(-0.418,0.418,bin_size),
-            np.linspace(-4,4,bin_size)]
-    
-    q_table = np.zeros(([bin_size] * state_space + [action_space]))
-    return q_table, bins
-
 def Discrete(obs, bins):
     obs_index = []
     for i in range(len(obs)): 
@@ -28,95 +18,116 @@ def Discrete(obs, bins):
 gamma = 0.995  # Discount factor
 alpha = 0.001  # Learning rate
 eta = 1.
-tau = 1000 # Phase length
-max_iterations = 1000  # Maximum number of iterations
-epsilon = -0.01
+# tau = 1000 # Phase length
+max_episodes = int(1e4)  # Maximum number of iterations
+epsilon = 0.
+batch_size = int(1024) 
+print_every = 100
 
-# Create the CartPole environment
-env = gym.make('CartPole-v1')
+# Create the environments
+env_name = "CartPole-v1"
+# env_name = "FrozenLake-v1"
+env = gym.make(env_name, render_mode="human")     #, is_slippery=False)#, render_mode="human")
+
+action_dim =  env.action_space.n # number of possible actions
+if env_name == "CartPole-v1":
+  state_dim =  env.observation_space.shape[0] # dimension of state space
+  bin_size=30
+  bins = [np.linspace(-4.8,4.8,bin_size),
+            np.linspace(-4,4,bin_size),
+            np.linspace(-0.418,0.418,bin_size),
+            np.linspace(-4,4,bin_size)]
+  Q = np.zeros(([bin_size] * state_dim + [action_dim]))
+elif env_name == "FrozenLake-v1":
+  state_dim =  env.observation_space.n # number of states
+  Q = np.zeros(([state_dim] + [action_dim]))
+else:
+   raise ValueError
+
+
 
 # Keep track of rewards and run time
 rewards = []
 av_rewards = []
 phase_lengths = []
-
-state_dim =  env.observation_space.shape[0] # dimension of state space
-action_dim =  env.action_space.n # number of possible actions
-
 # Initialize the batch to empty, Q(s,a) and the accumulated reward to zeros
 Z = []
-Q, bins = initi_Q(state_dim, action_dim)
+# Q, bins = initi_Q(state_dim, action_dim)
 Q_hat = Q.copy()
 total_reward = 0
 
 # Algorithm: Politex
 # Reset the environment and sample an initial state obs
-obs, info = env.reset()
-obs = Discrete(obs, bins)
+obs, info = env.reset(seed=123, options={})
+if env_name == "CartPole-v1":
+  obs = Discrete(obs, bins)
 
-for i in tqdm(range(max_iterations)):
-
+for e in tqdm(range(max_episodes)):
   # Initialize policy
   policy = np.array(softmax(eta*Q_hat, axis=-1))
   total_reward = 0
+  n_steps = 0
 
-  for t in range(tau):
+  while True:
+    n_steps+=1 
     # Execute current policy
     if np.random.uniform(0,1) < epsilon:
       action = env.action_space.sample() # Random action (left or right).
     else:
-      action = np.random.choice([0, 1], p=policy[obs])
+      # Softmax policy
+      # action = np.random.choice([i for i in range(action_dim)], p=policy[obs])
+      # Greedy action 
+      qs = [Q[obs][a] for a in range(action_dim)]
+      action = np.argmax(qs) 
+      
 
-      # qs = [Q[Discrete(s, bins)][a] for a in range(env.action_space.n)]
-      # a = np.argmax(qs) # Greedy action for state.
-
-    # Take action a and observe the reward and next state s'
+    # Take action a and observe the reward and next state
     next_obs, reward, terminated, truncated, info = env.step(action)
     done = terminated or truncated
-    next_obs = Discrete(next_obs, bins)
+    if env_name == "CartPole-v1":
+      next_obs = Discrete(next_obs, bins)
 
     # Store experience in replay buffer
     Z.append((obs, action, reward, next_obs, done))
 
-    # Set current state to next state
+    # update current obs and total reward
     obs = next_obs
-
     total_reward += reward
 
     if done:
         obs, info = env.reset()
-        obs = Discrete(obs, bins)
+        if env_name == "CartPole-v1":
+          obs = Discrete(obs, bins)
         break
 
-  eta -= 0.0005 # TODO why do we do this?
 
   # Sample a random batch of experiences from Z
-  batch_size = int(len(Z)*.8) # TODO why do we do this?
-  batch = random.sample(Z, batch_size)
+  # batch_size = int(len(Z)*.8)
+  # batch = random.sample(Z, batch_size)
+  batch = random.sample(Z, min(batch_size, len(Z)))
 
+  list_td_erros = []
   # Compute Q-values using data in Z
-  for obs_batch, action_batch, reward_batch, next_obs_batch, done_batch in batch:
-    Q_next_obs = [Q[next_obs_batch][a] for a in range(env.action_space.n)]
-    max_Q_next_obs = max(Q_next_obs)
-    # Calculate TD error
-    td_error = reward_batch + gamma * max_Q_next_obs - Q[obs_batch][action_batch]
-    # Update Q-value for current state-action pair
-    Q[obs_batch][action_batch] += alpha * td_error
+  for jj in range(100): # TODO we have to implement more steps here to decrease the TD error (even for same sample) 
+    for obs_batch, action_batch, reward_batch, next_obs_batch, done_batch in batch:
+      Q_next_obs = np.array([Q[next_obs_batch][a] for a in range(env.action_space.n)])
+      # max_Q_next_obs = max(Q_next_obs)
+      # V_next_obs = max(Q_next_obs) 
+      V_next_obs = Q_next_obs @ policy[next_obs]
+      # Calculate TD error
+      td_error = reward_batch + gamma * (1-terminated)*V_next_obs - Q[obs_batch][action_batch]
+      list_td_erros.append(td_error)
+      # Update Q-value for current state-action pair
+      Q[obs_batch][action_batch] += alpha * td_error
+    
 
-  Q_hat = i * Q_hat / (i+1) + Q / (i+1) # TODO check this is the right fomula for cumulative average
+  # Q_hat = e * Q_hat / (e+1) + Q / (e+1) # TODO do we really want to average? Is like decreasing eta?
+  Q_hat +=  Q 
 
-  # if i < 950: # TODO I don't get this
-  #   epsilon -= 0.00101
-
-  # Store episode reward and phase length
-  rewards.append(total_reward)
-  phase_lengths.append(t) # TODO this is basically the total_rewards-1 since reward is +1 for each time step, do we need it?
-
-  if len(av_rewards) == 100:
-    av_rewards = av_rewards[1:] #TODO what is this? Are we really taking the average of last 100 episodes?
-  av_rewards.append(total_reward)
 
   # Print progress every 100 iterations
-  if (i + 1) % 100 == 0:
-    print(f'Episode {i + 1}/{max_iterations} | Total reward: {total_reward} | '
-          f'Reward in last 100 iterations: {np.mean(av_rewards)} | Phase length: {t}')
+  rewards.append(total_reward)
+  if (e + 1) % print_every == 0:
+    av_rewards = np.mean(np.array(rewards[-100:]))
+    print(f'Episode {e + 1}/{max_episodes} | Last total reward: {total_reward} | '
+          f'Average reward in last 100 episodes: {av_rewards} | Last episode length: {n_steps}')
