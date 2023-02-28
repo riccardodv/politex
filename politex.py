@@ -26,7 +26,7 @@ def Discrete(obs, bins):
 
 # Set hyperparameters
 gamma = 0.995  # Discount factor
-alpha = 0.001  # Learning rate
+alpha = 0.1  # Learning rate
 eta = 1.
 tau = 1000 # Phase length
 max_iterations = 1000  # Maximum number of iterations
