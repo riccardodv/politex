@@ -26,8 +26,8 @@ class Qnet(th.nn.Module):
 
     def forward(self, s_a):
         hid1 = self.lin1(s_a)
-        activ = self.activ(hid1)
-        hid2 = self.lin2(activ)
+        # activ = self.activ(hid1)
+        hid2 = self.lin2(hid1)
         return hid2
 
 class Pi(th.nn.Module):
@@ -43,8 +43,8 @@ class Pi(th.nn.Module):
     def forward(self, s_a):
         with th.no_grad():
             hid1 = self.lin1(s_a)
-            activ = self.activ(hid1)
-            hid2 = self.lin2(activ)
+            # activ = self.activ(hid1)
+            hid2 = self.lin2(hid1)
         return hid2
 
     def add_q(self, q_pi_k):
