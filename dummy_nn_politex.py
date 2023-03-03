@@ -5,6 +5,7 @@ import torch as th
 
 # TODO:  replay buff, and batch update
 
+
 class Qnet(th.nn.Module):
     # Generic Q net class (we start small)
     def __init__(
@@ -17,11 +18,13 @@ class Qnet(th.nn.Module):
         super().__init__()
         self.env = env
         self.hidden_size = hidden_size
-        self.lin1 = th.nn.Linear(self.env.observation_space.shape[0] + 1, self.hidden_size)
+        self.lin1 = th.nn.Linear(
+            self.env.observation_space.shape[0] + 1, self.hidden_size
+        )
         self.lin2 = th.nn.Linear(self.hidden_size, 1)
         self.activ = activ()
 
-        self.optimizer = optimizer(self.parameters(), lr = 1e-3)
+        self.optimizer = optimizer(self.parameters(), lr=1e-3)
         self.optimizer.zero_grad()
 
     def forward(self, s_a):
@@ -29,6 +32,7 @@ class Qnet(th.nn.Module):
         # activ = self.activ(hid1)
         hid2 = self.lin2(hid1)
         return hid2
+
 
 class Pi(th.nn.Module):
     # Policy class to simplify summing q funcs
@@ -62,12 +66,12 @@ class Pi(th.nn.Module):
 
 
 # Create the CartPole environment
-env = gym.make('CartPole-v1')
+env = gym.make("CartPole-v1")
 A = range(env.action_space.n)
 loss = th.nn.MSELoss()
 gamma = 0.99
 eta = 1
-q_pi_k = Qnet(env) #in reality it is q_pi_k-1
+q_pi_k = Qnet(env)  # in reality it is q_pi_k-1
 pi = Pi(q_pi_k)
 
 for iter in range(10000):
@@ -75,17 +79,19 @@ for iter in range(10000):
     s = env.reset()
     logits_a = pi.get_logits(s)
     p_a = softmax(eta * logits_a)
-    a = np.random.choice(A, p = p_a)
+    a = np.random.choice(A, p=p_a)
     done = False
     for steps in range(128):
-        snext,r,done,_ = env.step(a)
+        snext, r, done, _ = env.step(a)
         logits_anext = pi.get_logits(snext)
         p_anext = softmax(eta * logits_anext)
-        anext = np.random.choice(A, p =  p_anext)
+        anext = np.random.choice(A, p=p_anext)
 
         q_s_a = q_pi_k.forward(th.FloatTensor(np.append(s, [a])))
         with th.no_grad():
-            target = r + gamma * q_pi_k.forward(th.FloatTensor(np.append(snext, [anext])))
+            target = r + gamma * q_pi_k.forward(
+                th.FloatTensor(np.append(snext, [anext]))
+            )
         l = loss(q_s_a, target)
         l.backward()
         q_pi_k.optimizer.step()
@@ -96,7 +102,7 @@ for iter in range(10000):
             s = env.reset()
             logits_a = pi.get_logits(s)
             p_a = softmax(eta * logits_a)
-            a = np.random.choice(A, p = p_a)
+            a = np.random.choice(A, p=p_a)
     ###################################
 
     ############## Pol update !! ######
@@ -105,16 +111,15 @@ for iter in range(10000):
     # init new nn for q_pi_k
     q_pi_k = Qnet(env)
 
-
     ######### Evals !! ################
-    if (iter + 1)% 100 == 0:
+    if (iter + 1) % 100 == 0:
         s = env.reset()
         done = False
         sum_r = 0
         while not done:
             logits_a = pi.get_logits(s)
             p_a = softmax(eta * logits_a)
-            a = np.random.choice(A, p = p_a)
-            s,r,done,_ = env.step(a)
+            a = np.random.choice(A, p=p_a)
+            s, r, done, _ = env.step(a)
             sum_r += r
-        print("eval rewards iter {}/10000: {}".format(iter+1, sum_r))
+        print("eval rewards iter {}/10000: {}".format(iter + 1, sum_r))
